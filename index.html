@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SpotiSix — Trình phát nhạc</title>
+  <meta name="description" content="SpotiSix — Trình phát nhạc với giao diện khám phá, tìm kiếm, thư viện và màn hình đang phát."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <section class="auth-screen" id="auth-screen" aria-labelledby="auth-title">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="auth-brand-mark" aria-hidden="true">S</span>
+        <span>SpotiSix</span>
+      </div>
+      <p class="auth-eyebrow">ÂM NHẠC CỦA RIÊNG BẠN</p>
+      <h1 id="auth-title">Đăng nhập SpotiSix</h1>
+      <p class="auth-description">Đăng nhập để tiếp tục đến thư viện và trình phát nhạc của bạn.</p>
+      <form id="auth-form" class="auth-form" onsubmit="submitAuth(event)">
+        <label for="auth-email">Email</label>
+        <input id="auth-email" type="email" autocomplete="email" placeholder="name@example.com" required/>
+        <label for="auth-password">Mật khẩu</label>
+        <input id="auth-password" type="password" autocomplete="current-password" minlength="8" placeholder="Ít nhất 8 ký tự" required/>
+        <div id="auth-confirm-wrap" class="auth-confirm-wrap hidden">
+          <label for="auth-confirm-password">Xác nhận mật khẩu</label>
+          <input id="auth-confirm-password" type="password" autocomplete="new-password" minlength="8" placeholder="Nhập lại mật khẩu"/>
+        </div>
+        <button id="auth-submit-btn" class="auth-submit-btn" type="submit">Đăng nhập</button>
+      </form>
+      <section id="email-confirmation" class="email-confirmation hidden" aria-labelledby="email-confirmation-title">
+        <div class="email-confirmation-icon" aria-hidden="true">✉</div>
+        <h2 id="email-confirmation-title">Kiểm tra hộp thư</h2>
+        <p>Chúng tôi đã gửi liên kết xác nhận đến <strong id="pending-confirm-email"></strong>. Mở email và nhấn xác nhận để kích hoạt tài khoản SpotiSix.</p>
+        <button id="resend-email-btn" class="auth-submit-btn" type="button" onclick="resendConfirmationEmail()">Gửi lại email xác nhận</button>
+        <p id="resend-email-status" class="auth-status" role="status" aria-live="polite"></p>
+        <button class="auth-back-btn" type="button" onclick="returnToSignIn()">Quay lại đăng nhập</button>
+      </section>
+      <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
+      <p id="auth-switch-prompt" class="auth-switch-prompt"><span id="auth-switch-copy">Chưa có tài khoản?</span> <button id="auth-switch-btn" type="button" onclick="toggleAuthMode()">Đăng ký</button></p>
+      <p id="auth-setup-note" class="auth-setup-note">Cần cấu hình Supabase để bật đăng nhập an toàn: tạo project, bật đăng ký email/mật khẩu, đặt Site URL/redirect URL cho tên miền triển khai, rồi điền Project URL và Publishable/anon key vào <code>supabase-config.js</code>. Hãy triển khai qua HTTPS. Không đặt service-role key trong ứng dụng trình duyệt.</p>
+    </div>
+  </section>
+  <p id="auth-toast" class="auth-toast hidden" role="status" aria-live="polite"></p>
+  <p class="app-toast hidden" id="app-toast" role="status" aria-live="polite"></p>
+  <aside class="shared-listening-banner hidden" id="shared-listening-banner" role="status" aria-live="polite">
+    <span id="shared-listening-label"></span>
+    <button type="button" onclick="leaveSharedListening()">Rời nghe chung</button>
+  </aside>
+  <dialog class="nearby-dialog" id="nearby-dialog" aria-labelledby="nearby-title">
+    <header class="nearby-dialog-header">
+      <div>
+        <span class="eyebrow">SPOTISIX · BLE</span>
+        <h2 id="nearby-title">Người ở gần</h2>
+      </div>
+      <button class="dialog-close" type="button" onclick="closeNearbyDialog()" aria-label="Đóng">×</button>
+    </header>
+    <p class="nearby-description">Kết nối với người đang mở SpotiSix và chủ động bật tìm kiếm.</p>
+    <div class="nearby-radar hidden" id="nearby-radar" aria-hidden="true">
+      <span class="nearby-radar-ring"></span>
+      <span class="nearby-radar-ring"></span>
+      <span class="nearby-radar-ring"></span>
+      <span class="nearby-radar-center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="2"/><path d="M5.64 5.64a9 9 0 0 0 0 12.72m12.72 0a9 9 0 0 0 0-12.72M8.46 8.46a5 5 0 0 0 0 7.08m7.08 0a5 5 0 0 0 0-7.08"/></svg></span>
+    </div>
+    <p class="nearby-status" id="nearby-status" role="status" aria-live="polite">Tên của bạn chỉ được phát khi đang tìm kiếm.</p>
+    <ul class="nearby-list" id="nearby-list" aria-label="Người dùng SpotiSix ở gần"></ul>
+    <button class="nearby-scan-button" id="nearby-scan-button" type="button" onclick="startNearbyDiscovery()">Bắt đầu tìm</button>
+    <button class="nearby-cancel-button hidden" id="nearby-cancel-button" type="button" onclick="stopNearbyDiscovery()">Hủy tìm kiếm</button>
+    <p class="nearby-privacy-note">Khi bật tìm kiếm trên web, tên hiển thị của bạn được chia sẻ với người dùng SpotiSix khác đang tìm kiếm. Kết nối qua Internet, không giới hạn khoảng cách Bluetooth. Đóng cửa sổ hoặc nhấn “Hủy tìm kiếm” để ngừng chia sẻ.</p>
+  </dialog>
+  <dialog class="playlist-dialog" id="playlist-dialog" aria-labelledby="playlist-dialog-title">
+    <form id="playlist-form">
+      <button class="dialog-close" type="button" onclick="closePlaylistDialog()" aria-label="Đóng">×</button>
+      <span class="eyebrow">THƯ VIỆN CỦA BẠN</span>
+      <h2 id="playlist-dialog-title">Tạo danh sách phát</h2>
+      <p>Đặt tên để bắt đầu sắp xếp những bài hát yêu thích.</p>
+      <label for="playlist-name-input">Tên danh sách phát</label>
+      <input id="playlist-name-input" name="name" maxlength="40" required placeholder="Ví dụ: Nhạc thư giãn"/>
+      <div class="dialog-actions">
+        <button type="button" class="dialog-cancel" onclick="closePlaylistDialog()">Hủy</button>
+        <button type="submit" class="dialog-submit">Tạo</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ══════════════════════ SIDEBAR ══════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <svg class="logo-svg" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="20" r="20" fill="url(#lg1)"/>
+        <path d="M12 20 Q20 10 28 20 Q20 30 12 20Z" fill="white" opacity="0.9"/>
+        <circle cx="20" cy="20" r="4" fill="white"/>
+        <defs>
+          <linearGradient id="lg1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#1DB954"/>
+            <stop offset="100%" stop-color="#FC3C44"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <span class="logo-text">SpotiSix</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" id="nav-home" aria-label="Trang chủ" onclick="showView('home')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span>Trang chủ</span>
+      </button>
+      <button class="nav-item" id="nav-search" aria-label="Tìm kiếm" onclick="showView('search')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <span>Tìm kiếm</span>
+      </button>
+      <button class="nav-item" id="nav-library" aria-label="Thư viện" onclick="showView('library')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+        <span>Thư viện</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-section">
+      <div class="section-header">
+        <span>Thư viện</span>
+        <div class="library-actions">
+          <button class="add-btn" onclick="openPlaylistDialog()" aria-label="Tạo playlist"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
+          <button class="add-btn" onclick="showView('library')" aria-label="Mở rộng thư viện"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 3h6v6h-2V6.41l-4.3 4.3-1.42-1.42 4.3-4.29H15V3zM9 21H3v-6h2v2.59l4.3-4.3 1.42 1.42-4.3 4.29H9V21z"/></svg></button>
+        </div>
+      </div>
+      <div class="library-filters" aria-label="Bộ lọc thư viện">
+        <button class="library-filter active" onclick="showView('library')">Playlist</button>
+        <button class="library-filter" onclick="showView('library');switchLibTab('albums')">Album</button>
+        <button class="library-filter" onclick="showView('library');switchLibTab('artists')">Nghệ sĩ</button>
+        <button class="library-filter library-filter-more" onclick="showView('library');switchLibTab('songs')" aria-label="Hiển thị bài hát">›</button>
+      </div>
+      <div class="library-sort">
+        <button aria-label="Tìm trong thư viện" onclick="showView('library')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>
+        <button onclick="showView('recent')">Gần đây <span>☷</span></button>
+      </div>
+      <div class="playlist-list" id="sidebar-playlists">
+        <button class="playlist-item active-playlist" onclick="playPlaylist(0)">
+          <div class="playlist-thumb thumb-1"></div>
+          <div class="playlist-info"><span class="playlist-name">vi</span><span class="playlist-meta">Danh sách phát · Rin154</span></div>
+        </button>
+        <button class="playlist-item" onclick="playPlaylist(1)">
+          <div class="playlist-thumb thumb-2"></div>
+          <div class="playlist-info"><span class="playlist-name">Wrxrdie</span><span class="playlist-meta">Nghệ sĩ</span></div>
+        </button>
+        <button class="playlist-item" onclick="playPlaylist(2)">
+          <div class="playlist-thumb thumb-3"></div>
+          <div class="playlist-info"><span class="playlist-name">My top tracks playlist</span><span class="playlist-meta">Danh sách phát · Rin154</span></div>
+        </button>
+        <button class="playlist-item" onclick="playPlaylist(3)">
+          <div class="playlist-thumb thumb-4"></div>
+          <div class="playlist-info"><span class="playlist-name">My top tracks playlist</span><span class="playlist-meta">Danh sách phát · Rin154</span></div>
+        </button>
+        <button class="playlist-item" onclick="playPlaylist(4)">
+          <div class="playlist-thumb thumb-5"></div>
+          <div class="playlist-info"><span class="playlist-name">u</span><span class="playlist-meta">Danh sách phát · Rin154</span></div>
+        </button>
+        <button class="playlist-item" onclick="playPlaylist(0)"><div class="playlist-thumb thumb-2"></div><div class="playlist-info"><span class="playlist-name">tlinh</span><span class="playlist-meta">Nghệ sĩ</span></div></button>
+        <button class="playlist-item" onclick="playPlaylist(1)"><div class="playlist-thumb thumb-4"></div><div class="playlist-info"><span class="playlist-name">FLVR</span><span class="playlist-meta">EP · tlinh</span></div></button>
+        <button class="playlist-item" onclick="playPlaylist(2)"><div class="playlist-thumb thumb-5"></div><div class="playlist-info"><span class="playlist-name">tlinh: Spotlight</span><span class="playlist-meta">Danh sách phát · MMusic Records</span></div></button>
+        <button class="playlist-item" onclick="playPlaylist(3)"><div class="playlist-thumb thumb-3"></div><div class="playlist-info"><span class="playlist-name">THE WXRDiES</span><span class="playlist-meta">Album · Wrxrdie</span></div></button>
+        <button class="playlist-item" onclick="playPlaylist(4)"><div class="playlist-thumb thumb-1"></div><div class="playlist-info"><span class="playlist-name">Bài hát đã thích</span><span class="playlist-meta">Danh sách phát · Rin154</span></div></button>
+        <button class="playlist-item" onclick="playPlaylist(0)"><div class="playlist-thumb thumb-4"></div><div class="playlist-info"><span class="playlist-name">CLOUDEE</span><span class="playlist-meta">Nghệ sĩ</span></div></button>
+      </div>
+    </div>
+
+  </aside>
+
+  <div class="profile-menu hidden" id="profile-menu" role="menu" aria-label="Menu hồ sơ">
+    <div class="profile-menu-heading"><span class="topbar-avatar">N</span><div><strong class="user-name">Nguyễn Mạnh Đạt</strong><small>Premium</small></div></div>
+    <button role="menuitem" onclick="openAccountView()">Tài khoản <span>›</span></button>
+    <button role="menuitem" onclick="showView('profile')">Hồ sơ <span>›</span></button>
+    <button role="menuitem" onclick="showView('recent')">Gần đây <span>›</span></button>
+    <button role="menuitem" onclick="showView('privacy')">Chế độ riêng tư <span>›</span></button>
+    <button role="menuitem" onclick="showView('settings')">Cài đặt <span>›</span></button>
+    <button role="menuitem" class="profile-menu-logout" onclick="signOut()">Đăng xuất <span>↗</span></button>
+  </div>
+
+  <!-- ══════════════════════ MAIN CONTENT ══════════════════════ -->
+  <main class="main-content" id="main-content">
+    <header class="topbar app-topbar">
+      <div class="topbar-start" aria-hidden="true">
+        <button class="topbar-btn topbar-history-btn" type="button" disabled aria-label="Quay lại"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+        <button class="topbar-btn topbar-history-btn" type="button" disabled aria-label="Tiến tới"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <div class="topbar-center">
+      <button class="topbar-btn" onclick="showHome()" aria-label="Về trang chủ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z"/></svg></button>
+      <div class="header-search">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 15.01 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input type="search" id="search-input" placeholder="Bạn muốn phát nội dung gì?" oninput="handleGlobalSearch(this.value)" aria-label="Tìm kiếm bài hát"/>
+        <button class="header-search-shortcut" type="button" onclick="showDiscover()" aria-label="Khám phá thể loại nhạc và album nổi bật" title="Khám phá thể loại và album nổi bật"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8v8H8z"/></svg></button>
+      </div>
+      </div>
+      <div class="topbar-actions">
+      <button class="nearby-trigger" type="button" onclick="openNearbyDialog()" aria-label="Tìm người dùng SpotiSix ở gần" title="Tìm người ở gần">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M5.64 5.64a9 9 0 0 0 0 12.72m12.72 0a9 9 0 0 0 0-12.72M8.46 8.46a5 5 0 0 0 0 7.08m7.08 0a5 5 0 0 0 0-7.08"/></svg>
+        <span>Ở gần</span>
+      </button>
+      <button class="queue-toggle" onclick="toggleQueuePanel()" aria-label="Hiện hoặc ẩn danh sách đang phát"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></button>
+      <button class="topbar-avatar global-profile-trigger" type="button" onclick="toggleProfileMenu(event)" aria-label="Mở hồ sơ và đăng xuất" title="Hồ sơ và đăng xuất" aria-haspopup="menu" aria-expanded="false">N</button>
+      </div>
+    </header>
+
+    <!-- HOME VIEW -->
+    <div class="view active" id="view-home">
+      <div class="content-scroll">
+        <section class="playlist-screen" aria-labelledby="playlist-heading">
+          <div class="playlist-hero">
+            <div class="playlist-cover-collage" aria-hidden="true">
+              <img src="album_lumina.jpg" alt=""/>
+              <img src="album_aurora.jpg" alt=""/>
+              <img src="album_jazz.jpg" alt=""/>
+              <img src="album_lofi.jpg" alt=""/>
+            </div>
+            <div class="playlist-heading-copy">
+              <span class="playlist-type">Danh sách phát công khai</span>
+              <h1 id="playlist-heading">vi</h1>
+              <p class="playlist-owner"><span class="owner-avatar">R</span><strong>Rin154</strong><span>·</span> 27 bài hát, 1 giờ 47 phút</p>
+            </div>
+          </div>
+          <div class="playlist-controls">
+            <button class="playlist-main-play" id="playlist-main-play" onclick="playActivePlaylist()" aria-label="Phát playlist"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+            <button class="playlist-action-icon" id="playlist-shuffle" onclick="toggleShuffle(event)" aria-label="Phát ngẫu nhiên"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+            <button class="playlist-action-icon" onclick="downloadActivePlaylist()" aria-label="Tải playlist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v10m-4-4 4 4 4-4"/></svg></button>
+            <button class="playlist-action-icon" onclick="shareActivePlaylist()" aria-label="Chia sẻ playlist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21v-2a7 7 0 0 1 14 0v2m4-12v8m-4-4h8"/></svg></button>
+            <button class="playlist-action-icon" onclick="manageActivePlaylist()" aria-label="Tùy chọn playlist">•••</button>
+            <div class="playlist-sort-control"><button aria-label="Tìm trong danh sách" onclick="showView('search')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button><span>Thứ tự tùy chỉnh</span><span>☷</span></div>
+          </div>
+          <div class="playlist-table">
+            <div class="playlist-table-head"><span>#</span><span>Tiêu đề</span><span>Album</span><span>Ngày thêm</span><span aria-label="Thời lượng">◷</span></div>
+            <div class="track-list" id="playlist-track-rows">
+              <div class="track-item" onclick="playSong(0)" id="track-0"><span class="track-num">1</span><img src="album_lumina.jpg" alt="" class="track-thumb"/><div class="track-details"><p class="track-name">Celestial Vibe</p><p class="track-artist">The Midnight Drive</p></div><span class="playlist-album">Lumina</span><span class="playlist-date">3 tuần trước</span><span class="track-duration">3:45</span></div>
+              <div class="track-item" onclick="playSong(1)" id="track-1"><span class="track-num">2</span><img src="album_lofi.jpg" alt="" class="track-thumb"/><div class="track-details"><p class="track-name">Night Rain &amp; Reverie</p><p class="track-artist">Lo-Fi Girl</p></div><span class="playlist-album">Study Session</span><span class="playlist-date">3 tuần trước</span><span class="track-duration">4:20</span></div>
+              <div class="track-item" onclick="playSong(2)" id="track-2"><span class="track-num">3</span><img src="album_nova.jpg" alt="" class="track-thumb"/><div class="track-details"><p class="track-name">Starlight</p><p class="track-artist">Nova</p></div><span class="playlist-album">Electronic Journey</span><span class="playlist-date">3 tuần trước</span><span class="track-duration">5:12</span></div>
+              <div class="track-item" onclick="playSong(3)" id="track-3"><span class="track-num">4</span><img src="album_aurora.jpg" alt="" class="track-thumb"/><div class="track-details"><p class="track-name">Neon Pulse</p><p class="track-artist">Aurora Borealis</p></div><span class="playlist-album">Synthwave</span><span class="playlist-date">3 tuần trước</span><span class="track-duration">4:55</span></div>
+              <div class="track-item" onclick="playSong(4)" id="track-4"><span class="track-num">5</span><img src="album_jazz.jpg" alt="" class="track-thumb"/><div class="track-details"><p class="track-name">Blue Note Sessions</p><p class="track-artist">Miles &amp; Co</p></div><span class="playlist-album">Modern Jazz</span><span class="playlist-date">3 tuần trước</span><span class="track-duration">6:30</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Hero Grid - Spotify Style -->
+        <section class="hero-section">
+          <div class="home-filter-chips" aria-label="Bộ lọc trang chủ">
+            <button class="home-filter-chip active" type="button">Tất cả</button>
+            <button class="home-filter-chip" type="button" onclick="showView('library');switchLibTab('songs')">Nhạc</button>
+            <button class="home-filter-chip" type="button" onclick="showView('library');switchLibTab('albums')">Album</button>
+            <button class="home-filter-chip" type="button" onclick="showView('library');switchLibTab('playlists')">Playlist</button>
+          </div>
+          <div class="hero-greeting">
+            <h1 id="greeting-text">Xin chào!</h1>
+            <p>Chào mừng trở lại — nhạc của bạn đang chờ.</p>
+          </div>
+          <div class="hero-cards">
+            <div class="hero-card" onclick="playSong(0)"><img src="album_lumina.jpg" alt="Lumina" class="hero-card-img"/><div class="hero-card-info"><span>Celestial Vibe</span></div><button class="hero-play-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="hero-card" onclick="playSong(1)"><img src="album_lofi.jpg" alt="Lo-Fi" class="hero-card-img"/><div class="hero-card-info"><span>Night Rain Study</span></div><button class="hero-play-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="hero-card" onclick="playSong(2)"><img src="album_nova.jpg" alt="Nova" class="hero-card-img"/><div class="hero-card-info"><span>Starlight</span></div><button class="hero-play-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="hero-card" onclick="playSong(3)"><img src="album_aurora.jpg" alt="Aurora" class="hero-card-img"/><div class="hero-card-info"><span>Neon Pulse</span></div><button class="hero-play-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="hero-card" onclick="playSong(4)"><img src="album_jazz.jpg" alt="Jazz" class="hero-card-img"/><div class="hero-card-info"><span>Blue Note</span></div><button class="hero-play-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="hero-card" onclick="playSong(0)"><img src="album_lumina.jpg" alt="Lumina2" class="hero-card-img"/><div class="hero-card-info"><span>Midnight Drive</span></div><button class="hero-play-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div>
+          </div>
+        </section>
+
+        <!-- Trending tracks -->
+        <section class="featured-section">
+          <div class="section-title-row"><h2>Nghe lại</h2><button class="see-all-btn" onclick="showView('recent')">Hiện tất cả</button></div>
+          <div class="scroll-row">
+            <div class="album-card" onclick="playSong(0)"><div class="album-card-art"><img src="album_lumina.jpg" alt="Lumina"/><div class="album-card-overlay"><button class="play-overlay-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div></div><p class="album-card-title">Celestial Vibe</p><p class="album-card-sub">The Midnight Drive</p></div>
+            <div class="album-card" onclick="playSong(3)"><div class="album-card-art"><img src="album_aurora.jpg" alt="Aurora"/><div class="album-card-overlay"><button class="play-overlay-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div></div><p class="album-card-title">Neon Pulse</p><p class="album-card-sub">Aurora Borealis</p></div>
+            <div class="album-card" onclick="playSong(2)"><div class="album-card-art"><img src="album_nova.jpg" alt="Nova"/><div class="album-card-overlay"><button class="play-overlay-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div></div><p class="album-card-title">Starlight</p><p class="album-card-sub">Nova</p></div>
+            <div class="album-card" onclick="playSong(1)"><div class="album-card-art"><img src="album_lofi.jpg" alt="Lo-Fi"/><div class="album-card-overlay"><button class="play-overlay-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div></div><p class="album-card-title">Night Rain</p><p class="album-card-sub">Lo-Fi Girl</p></div>
+            <div class="album-card" onclick="playSong(4)"><div class="album-card-art"><img src="album_jazz.jpg" alt="Jazz"/><div class="album-card-overlay"><button class="play-overlay-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div></div><p class="album-card-title">Blue Note Sessions</p><p class="album-card-sub">Miles &amp; Co</p></div>
+          </div>
+        </section>
+
+        <!-- Mix Section -->
+        <section class="mix-section">
+          <div class="section-title-row"><h2>Đài phát đề xuất</h2><button class="see-all-btn" onclick="showView('library');switchLibTab('playlists')">Hiện tất cả</button></div>
+          <div class="scroll-row">
+            <div class="mix-card" onclick="playSong(1)"><div class="mix-art"><img src="album_lofi.jpg" alt="Lo-Fi mix"/><div class="mix-gradient"></div><span class="mix-label">Lo-Fi Mix</span></div><p class="mix-desc">Dựa trên: Night Rain</p></div>
+            <div class="mix-card" onclick="playSong(3)"><div class="mix-art"><img src="album_aurora.jpg" alt="Synthwave mix"/><div class="mix-gradient"></div><span class="mix-label">Synthwave Mix</span></div><p class="mix-desc">Dựa trên: Neon Pulse</p></div>
+            <div class="mix-card" onclick="playSong(4)"><div class="mix-art"><img src="album_jazz.jpg" alt="Jazz mix"/><div class="mix-gradient"></div><span class="mix-label">Jazz Mix</span></div><p class="mix-desc">Dựa trên: Blue Note</p></div>
+            <div class="mix-card" onclick="playSong(2)"><div class="mix-art"><img src="album_nova.jpg" alt="Electronic mix"/><div class="mix-gradient"></div><span class="mix-label">Electronic Mix</span></div><p class="mix-desc">Dựa trên: Starlight</p></div>
+            <div class="mix-card" onclick="playSong(0)"><div class="mix-art"><img src="album_lumina.jpg" alt="Ambient mix"/><div class="mix-gradient"></div><span class="mix-label">Ambient Mix</span></div><p class="mix-desc">Dựa trên: Celestial Vibe</p></div>
+          </div>
+        </section>
+
+        <!-- Track List -->
+        <section class="recent-section">
+          <div class="section-title-row"><h2>⏱ Nghe gần đây</h2></div>
+          <div class="track-list">
+            <div class="track-item" onclick="playSong(0)" id="track-0"><span class="track-num">1</span><img src="album_lumina.jpg" alt="Lumina" class="track-thumb"/><div class="track-details"><p class="track-name">Celestial Vibe</p><p class="track-artist">The Midnight Drive · Lumina</p></div><div class="track-meta"><button class="track-like" id="like-0" onclick="toggleLike(event,0)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/></svg></button><span class="track-duration">3:45</span></div></div>
+            <div class="track-item" onclick="playSong(1)" id="track-1"><span class="track-num">2</span><img src="album_lofi.jpg" alt="Lo-Fi" class="track-thumb"/><div class="track-details"><p class="track-name">Night Rain &amp; Reverie</p><p class="track-artist">Lo-Fi Girl · Study Session</p></div><div class="track-meta"><button class="track-like" id="like-1" onclick="toggleLike(event,1)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/></svg></button><span class="track-duration">4:20</span></div></div>
+            <div class="track-item" onclick="playSong(2)" id="track-2"><span class="track-num">3</span><img src="album_nova.jpg" alt="Nova" class="track-thumb"/><div class="track-details"><p class="track-name">Starlight</p><p class="track-artist">Nova · Electronic Journey</p></div><div class="track-meta"><button class="track-like" id="like-2" onclick="toggleLike(event,2)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/></svg></button><span class="track-duration">5:12</span></div></div>
+            <div class="track-item" onclick="playSong(3)" id="track-3"><span class="track-num">4</span><img src="album_aurora.jpg" alt="Aurora" class="track-thumb"/><div class="track-details"><p class="track-name">Neon Pulse</p><p class="track-artist">Aurora Borealis · Synthwave</p></div><div class="track-meta"><button class="track-like liked" id="like-3" onclick="toggleLike(event,3)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/></svg></button><span class="track-duration">4:55</span></div></div>
+            <div class="track-item" onclick="playSong(4)" id="track-4"><span class="track-num">5</span><img src="album_jazz.jpg" alt="Jazz" class="track-thumb"/><div class="track-details"><p class="track-name">Blue Note Sessions</p><p class="track-artist">Miles &amp; Co · Modern Jazz</p></div><div class="track-meta"><button class="track-like" id="like-4" onclick="toggleLike(event,4)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/></svg></button><span class="track-duration">6:30</span></div></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- SEARCH VIEW -->
+    <div class="view" id="view-search">
+      <div class="content-scroll">
+        <div id="search-results-container" class="search-results-container hidden"><h2>Kết quả tìm kiếm</h2><div id="search-results" class="track-list"></div></div>
+        <div id="browse-categories">
+          <h2>Khám phá thể loại</h2>
+          <div class="categories-grid">
+            <div class="category-card cat-pop" onclick="searchCategory('Pop')"><span>Pop</span></div>
+            <div class="category-card cat-hiphop" onclick="searchCategory('Hip-Hop')"><span>Hip-Hop</span></div>
+            <div class="category-card cat-rock" onclick="searchCategory('Rock')"><span>Rock</span></div>
+            <div class="category-card cat-electronic" onclick="searchCategory('Electronic')"><span>Electronic</span></div>
+            <div class="category-card cat-jazz" onclick="searchCategory('Jazz')"><span>Jazz</span></div>
+            <div class="category-card cat-lofi" onclick="searchCategory('Lo-Fi')"><span>Lo-Fi</span></div>
+            <div class="category-card cat-classical" onclick="searchCategory('Classical')"><span>Classical</span></div>
+            <div class="category-card cat-vpop" onclick="searchCategory('V-Pop')"><span>V-Pop</span></div>
+            <div class="category-card cat-kpop" onclick="searchCategory('K-Pop')"><span>K-Pop</span></div>
+            <div class="category-card cat-ambient" onclick="searchCategory('Ambient')"><span>Ambient</span></div>
+            <div class="category-card cat-latin" onclick="searchCategory('Latin')"><span>Latin</span></div>
+            <div class="category-card cat-afrobeats" onclick="searchCategory('Afrobeats')"><span>Afrobeats</span></div>
+            <div class="category-card cat-country" onclick="searchCategory('Country')"><span>Country</span></div>
+            <div class="category-card cat-reggae" onclick="searchCategory('Reggae')"><span>Reggae</span></div>
+            <div class="category-card cat-metal" onclick="searchCategory('Metal')"><span>Metal</span></div>
+          </div>
+          <section class="discover-albums" aria-labelledby="discover-albums-title">
+            <h2 id="discover-albums-title">Album nổi bật thế giới</h2>
+            <p class="discover-albums-note">Khám phá album kinh điển qua Spotify. Cần kết nối internet để xem nội dung.</p>
+            <div class="discover-albums-grid">
+              <a class="discover-album-card discover-album-thriller" href="https://open.spotify.com/search/album%3A%20Thriller%20Michael%20Jackson" target="_blank" rel="noopener noreferrer"><span class="discover-album-art">THRILLER</span><strong>Thriller</strong><span>Michael Jackson · Pop</span></a>
+              <a class="discover-album-card discover-album-abbey" href="https://open.spotify.com/search/album%3A%20Abbey%20Road%20The%20Beatles" target="_blank" rel="noopener noreferrer"><span class="discover-album-art">ABBEY<br/>ROAD</span><strong>Abbey Road</strong><span>The Beatles · Rock</span></a>
+              <a class="discover-album-card discover-album-darkside" href="https://open.spotify.com/search/album%3A%20The%20Dark%20Side%20of%20the%20Moon%20Pink%20Floyd" target="_blank" rel="noopener noreferrer"><span class="discover-album-art">DARK<br/>SIDE</span><strong>The Dark Side of the Moon</strong><span>Pink Floyd · Progressive rock</span></a>
+              <a class="discover-album-card discover-album-back" href="https://open.spotify.com/search/album%3A%20Back%20in%20Black%20AC%2FDC" target="_blank" rel="noopener noreferrer"><span class="discover-album-art">BACK<br/>IN BLACK</span><strong>Back in Black</strong><span>AC/DC · Hard rock</span></a>
+              <a class="discover-album-card discover-album-rumours" href="https://open.spotify.com/search/album%3A%20Rumours%20Fleetwood%20Mac" target="_blank" rel="noopener noreferrer"><span class="discover-album-art">RUMOURS</span><strong>Rumours</strong><span>Fleetwood Mac · Rock</span></a>
+              <a class="discover-album-card discover-album-nevermind" href="https://open.spotify.com/search/album%3A%20Nevermind%20Nirvana" target="_blank" rel="noopener noreferrer"><span class="discover-album-art">NEVERMIND</span><strong>Nevermind</strong><span>Nirvana · Grunge</span></a>
+              <a class="discover-album-card discover-album-21" href="https://open.spotify.com/search/album%3A%2021%20Adele" target="_blank" rel="noopener noreferrer"><span class="discover-album-art">21</span><strong>21</strong><span>Adele · Pop / Soul</span></a>
+              <a class="discover-album-card discover-album-ram" href="https://open.spotify.com/search/album%3A%20Random%20Access%20Memories%20Daft%20Punk" target="_blank" rel="noopener noreferrer"><span class="discover-album-art">R.A.M.</span><strong>Random Access Memories</strong><span>Daft Punk · Electronic</span></a>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIBRARY VIEW -->
+    <div class="view" id="view-library">
+      <header class="topbar"><h1 class="topbar-title">Thư viện của tôi</h1></header>
+      <div class="content-scroll">
+        <section class="spotify-connect-panel" aria-labelledby="spotify-connect-title">
+          <div>
+            <h2 id="spotify-connect-title">Kết nối Spotify</h2>
+            <p>Đăng nhập để tải toàn bộ bài hát đã lưu và ảnh bìa từ thư viện Spotify của bạn. Tạo ứng dụng tại <a class="spotify-dashboard-link" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a>.</p>
+            <p class="spotify-connect-note">SpotiSix chỉ đọc thông tin bài hát và ảnh bìa; nội dung Spotify được phát theo phương thức chính thức, không tải tệp nhạc.</p>
+          </div>
+          <label class="spotify-client-label" for="spotify-client-id">Spotify Client ID</label>
+          <div class="spotify-connect-controls">
+            <button class="spotify-action-btn spotify-secondary-btn" type="button" onclick="document.getElementById('audio-file-input').click()">Thêm nhạc từ thiết bị</button>
+            <input id="audio-file-input" class="hidden" type="file" accept="audio/*" multiple onchange="importAudioFiles(this.files);this.value=''"/>
+            <button id="community-audio-upload-btn" class="spotify-action-btn" type="button" onclick="document.getElementById('community-audio-input').click()">Đăng nhạc lên SpotiSix</button>
+            <input id="community-audio-input" class="hidden" type="file" accept="audio/*" multiple onchange="publishAudioFiles(this.files);this.value=''"/>
+            <input id="spotify-client-id" type="text" autocomplete="off" placeholder="Nhập Client ID từ Spotify Developer Dashboard"/>
+            <button id="spotify-connect-btn" class="spotify-action-btn" onclick="connectSpotify()">Kết nối</button>
+            <button id="spotify-sync-btn" class="spotify-action-btn hidden" onclick="loadSpotifyLibrary()">Tải lại</button>
+            <button id="spotify-disconnect-btn" class="spotify-action-btn spotify-secondary-btn hidden" onclick="disconnectSpotify()">Ngắt kết nối</button>
+          </div>
+          <p class="spotify-redirect-hint">Thêm URI chuyển hướng này trong Spotify Developer Dashboard: <code id="spotify-redirect-uri"></code></p>
+          <p id="spotify-status" class="spotify-status" role="status" aria-live="polite">Chưa kết nối Spotify.</p>
+          <p id="community-upload-status" class="spotify-status" role="status" aria-live="polite">Đăng nhập SpotiSix trước khi đăng nhạc công khai.</p>
+          <p class="spotify-connect-note">Nhạc đăng lên đây sẽ được mọi người dùng SpotiSix tìm kiếm và nghe. Chỉ đăng tệp bạn có quyền chia sẻ công khai.</p>
+          <p class="spotify-connect-note">Nhạc thêm từ thiết bị được lưu trong bộ nhớ trình duyệt này và còn sau khi tải lại trang. Nhạc không tự đồng bộ sang trình duyệt hoặc thiết bị khác.</p>
+        </section>
+        <div class="library-tabs">
+          <button class="lib-tab active" id="lib-tab-playlists" onclick="switchLibTab('playlists')">Playlist</button>
+          <button class="lib-tab" id="lib-tab-albums" onclick="switchLibTab('albums')">Album</button>
+          <button class="lib-tab" id="lib-tab-artists" onclick="switchLibTab('artists')">Nghệ sĩ</button>
+          <button class="lib-tab" id="lib-tab-songs" onclick="switchLibTab('songs')">Bài hát</button>
+          <button class="library-page-search" type="button" aria-label="Tìm bài hát trong thư viện" title="Tìm bài hát trong thư viện" onclick="toggleLibrarySearch()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>
+        </div>
+        <div id="lib-playlists" class="lib-section">
+          <div class="lib-grid">
+            <div class="lib-card" onclick="playPlaylist(0)"><div class="lib-card-img" style="background:linear-gradient(135deg,#1DB954,#0a4a20)"><svg viewBox="0 0 24 24" fill="white" width="40"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg></div><p class="lib-card-name">Chill Mix</p><p class="lib-card-sub">Playlist · 12 bài</p></div>
+            <div class="lib-card" onclick="playPlaylist(1)"><div class="lib-card-img" style="background:linear-gradient(135deg,#FC3C44,#7a0010)"><svg viewBox="0 0 24 24" fill="white" width="40"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg></div><p class="lib-card-name">Discover Weekly</p><p class="lib-card-sub">Playlist · 30 bài</p></div>
+            <div class="lib-card" onclick="playPlaylist(2)"><div class="lib-card-img" style="background:linear-gradient(135deg,#5856D6,#1a1a6e)"><svg viewBox="0 0 24 24" fill="white" width="40"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg></div><p class="lib-card-name">Night Grooves</p><p class="lib-card-sub">Playlist · 8 bài</p></div>
+            <div class="lib-card" onclick="playPlaylist(3)"><div class="lib-card-img" style="background:linear-gradient(135deg,#FF2D55,#6600ff)"><svg viewBox="0 0 24 24" fill="white" width="40"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg></div><p class="lib-card-name">Synthwave Drive</p><p class="lib-card-sub">Playlist · 20 bài</p></div>
+            <div class="lib-card" onclick="playPlaylist(4)"><div class="lib-card-img" style="background:linear-gradient(135deg,#FF9500,#5c2e00)"><svg viewBox="0 0 24 24" fill="white" width="40"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg></div><p class="lib-card-name">Jazz Sessions</p><p class="lib-card-sub">Playlist · 15 bài</p></div>
+          </div>
+        </div>
+        <div id="lib-albums" class="lib-section hidden">
+          <div class="lib-grid">
+            <div class="lib-card" onclick="playSong(0)"><img src="album_lumina.jpg" alt="Lumina" class="lib-card-img"/><p class="lib-card-name">Lumina</p><p class="lib-card-sub">The Midnight Drive · 2024</p></div>
+            <div class="lib-card" onclick="playSong(1)"><img src="album_lofi.jpg" alt="Lo-Fi" class="lib-card-img"/><p class="lib-card-name">Night Rain &amp; Reverie</p><p class="lib-card-sub">Lo-Fi Girl · 2024</p></div>
+            <div class="lib-card" onclick="playSong(2)"><img src="album_nova.jpg" alt="Nova" class="lib-card-img"/><p class="lib-card-name">Starlight</p><p class="lib-card-sub">Nova · 2024</p></div>
+            <div class="lib-card" onclick="playSong(3)"><img src="album_aurora.jpg" alt="Aurora" class="lib-card-img"/><p class="lib-card-name">Neon Pulse</p><p class="lib-card-sub">Aurora Borealis · 2024</p></div>
+            <div class="lib-card" onclick="playSong(4)"><img src="album_jazz.jpg" alt="Jazz" class="lib-card-img"/><p class="lib-card-name">Blue Note Sessions</p><p class="lib-card-sub">Miles &amp; Co · 2024</p></div>
+          </div>
+        </div>
+        <div id="lib-artists" class="lib-section hidden">
+          <div class="artists-list">
+            <div class="artist-row"><img src="album_lumina.jpg" alt="TMD" class="artist-avatar"/><div class="artist-info"><p class="artist-name">The Midnight Drive</p><p class="artist-meta">Nghệ sĩ · 2.4M người theo dõi</p></div><button class="follow-btn" type="button">Theo dõi</button></div>
+            <div class="artist-row"><img src="album_lofi.jpg" alt="LFG" class="artist-avatar"/><div class="artist-info"><p class="artist-name">Lo-Fi Girl</p><p class="artist-meta">Nghệ sĩ · 8.1M người theo dõi</p></div><button class="follow-btn" type="button">Theo dõi</button></div>
+            <div class="artist-row"><img src="album_nova.jpg" alt="Nova" class="artist-avatar"/><div class="artist-info"><p class="artist-name">Nova</p><p class="artist-meta">Nghệ sĩ · 1.2M người theo dõi</p></div><button class="follow-btn following" type="button">Đang theo dõi</button></div>
+            <div class="artist-row"><img src="album_aurora.jpg" alt="AB" class="artist-avatar"/><div class="artist-info"><p class="artist-name">Aurora Borealis</p><p class="artist-meta">Nghệ sĩ · 3.7M người theo dõi</p></div><button class="follow-btn following" type="button">Đang theo dõi</button></div>
+            <div class="artist-row"><img src="album_jazz.jpg" alt="MC" class="artist-avatar"/><div class="artist-info"><p class="artist-name">Miles &amp; Co</p><p class="artist-meta">Nghệ sĩ · 950K người theo dõi</p></div><button class="follow-btn" type="button">Theo dõi</button></div>
+          </div>
+        </div>
+        <div id="lib-songs" class="lib-section hidden">
+          <div id="spotify-demo-library" class="track-list">
+            <div class="track-item liked-song" onclick="playSong(3)"><span class="track-num heart-icon">♥</span><img src="album_aurora.jpg" alt="Aurora" class="track-thumb"/><div class="track-details"><p class="track-name">Neon Pulse</p><p class="track-artist">Aurora Borealis</p></div><div class="track-meta"><span class="track-duration">4:55</span></div></div>
+            <div class="track-item" onclick="playSong(0)"><span class="track-num">1</span><img src="album_lumina.jpg" alt="Lumina" class="track-thumb"/><div class="track-details"><p class="track-name">Celestial Vibe</p><p class="track-artist">The Midnight Drive</p></div><div class="track-meta"><span class="track-duration">3:45</span></div></div>
+            <div class="track-item" onclick="playSong(1)"><span class="track-num">2</span><img src="album_lofi.jpg" alt="Lo-Fi" class="track-thumb"/><div class="track-details"><p class="track-name">Night Rain &amp; Reverie</p><p class="track-artist">Lo-Fi Girl</p></div><div class="track-meta"><span class="track-duration">4:20</span></div></div>
+          </div>
+          <div id="spotify-library-results" class="track-list"></div>
+        </div>
+      </div>
+    </div>
+    <div class="view account-view" id="view-account">
+      <header class="topbar"><button class="back-to-home" onclick="showView('home')">‹ <span>Quay lại</span></button><h1 class="topbar-title">Tài khoản</h1></header>
+      <div class="content-scroll account-content">
+        <section class="account-summary glass-panel">
+          <div class="account-summary-copy"><span class="eyebrow">GÓI CỦA BẠN</span><h2>✦ Premium</h2><p>Âm nhạc không quảng cáo, phát mọi lúc và chất lượng âm thanh cao.</p><span class="account-email" id="account-email">Tài khoản SpotiSix</span></div>
+          <button class="glass-action" onclick="showView('settings')">Quản lý cài đặt <span>↗</span></button>
+        </section>
+        <section class="account-card glass-panel"><h2>Tài khoản</h2><button class="account-row" onclick="showAccountNotice('Chỉnh sửa thông tin cá nhân')"><span class="account-row-icon">✎</span><span>Chỉnh sửa thông tin cá nhân</span><b>›</b></button><button class="account-row" onclick="showAccountNotice('Khôi phục danh sách phát')"><span class="account-row-icon">↻</span><span>Khôi phục danh sách phát</span><b>›</b></button></section>
+        <section class="account-card glass-panel"><h2>Bảo mật và quyền riêng tư</h2><button class="account-row" onclick="showAccountNotice('Quản lý ứng dụng')"><span class="account-row-icon">▦</span><span>Quản lý ứng dụng</span><b>›</b></button><button class="account-row" onclick="showView('privacy')"><span class="account-row-icon">◉</span><span>Quyền riêng tư của tài khoản</span><b>›</b></button><button class="account-row" onclick="showAccountNotice('Xác minh 2 bước')"><span class="account-row-icon">▣</span><span>Xác minh 2 bước</span><b>›</b></button><button class="account-row" onclick="signOut()"><span class="account-row-icon">↗</span><span>Đăng xuất khỏi tài khoản</span><b>›</b></button></section>
+        <section class="account-card glass-panel"><h2>Trợ giúp</h2><button class="account-row" onclick="showAccountNotice('Trung tâm hỗ trợ SpotiSix')"><span class="account-row-icon">?</span><span>Trung tâm hỗ trợ SpotiSix</span><b>›</b></button></section>
+        <p class="account-notice" id="account-notice" role="status" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <div class="view account-view" id="view-profile">
+      <header class="topbar"><button class="back-to-home" onclick="showView('home')">‹ <span>Quay lại</span></button><h1 class="topbar-title">Hồ sơ</h1></header>
+      <div class="content-scroll account-content">
+        <section class="profile-hero glass-panel"><div class="profile-large-avatar topbar-avatar">N</div><div><span class="eyebrow">HỒ SƠ CỦA BẠN</span><h2 class="user-name">Nguyễn Mạnh Đạt</h2><p>Người yêu âm nhạc · Thành viên SpotiSix</p></div></section>
+        <section class="profile-stats"><div class="glass-panel"><strong>5</strong><span>Playlist</span></div><div class="glass-panel"><strong>2</strong><span>Nghệ sĩ đang theo dõi</span></div><div class="glass-panel"><strong>128</strong><span>Người theo dõi bạn</span></div></section>
+        <section class="account-card glass-panel"><div class="profile-section-heading"><h2>Nghệ sĩ bạn đang theo dõi</h2><button onclick="showView('library')">Xem thư viện</button></div><div class="profile-followed-artists"><article><img src="album_nova.jpg" alt="Nova"/><span>Nova</span><small>Nghệ sĩ</small></article><article><img src="album_aurora.jpg" alt="Aurora Borealis"/><span>Aurora Borealis</span><small>Nghệ sĩ</small></article></div></section>
+        <section class="account-card glass-panel"><div class="profile-section-heading"><h2>Playlist của bạn</h2><button onclick="showView('library')">Xem tất cả</button></div><div class="profile-playlists"><button onclick="playPlaylist(0)">Chill Mix <span>12 bài</span></button><button onclick="playPlaylist(1)">Discover Weekly <span>30 bài</span></button><button onclick="playPlaylist(2)">Night Grooves <span>8 bài</span></button><button onclick="playPlaylist(3)">Synthwave Drive <span>20 bài</span></button><button onclick="playPlaylist(4)">Jazz Sessions <span>15 bài</span></button></div></section>
+      </div>
+    </div>
+
+    <div class="view account-view" id="view-recent">
+      <header class="topbar"><button class="back-to-home" onclick="showView('home')">‹ <span>Quay lại</span></button><h1 class="topbar-title">Nghe gần đây</h1></header>
+      <div class="content-scroll account-content">
+        <section class="account-card glass-panel"><h2>Album đã nghe</h2><div class="lib-grid" id="recent-albums"></div></section>
+        <section class="account-card glass-panel"><h2>Bài hát đã nghe</h2><div class="track-list" id="recent-tracks"></div><p class="empty-recent hidden" id="empty-recent">Những album và bài hát bạn nghe sẽ xuất hiện ở đây.</p></section>
+      </div>
+    </div>
+
+    <div class="view account-view" id="view-privacy">
+      <header class="topbar"><button class="back-to-home" onclick="showView('home')">‹ <span>Quay lại</span></button><h1 class="topbar-title">Chế độ riêng tư</h1></header>
+      <div class="content-scroll account-content">
+        <section class="privacy-card glass-panel">
+          <div class="privacy-lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="11" rx="3" fill="currentColor"/><path d="M8 10V7a4 4 0 1 1 8 0v3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="12" cy="15" r="1.4" fill="#101522"/></svg></div>
+          <span class="eyebrow">NGHE NHẠC RIÊNG TƯ</span><h2 id="privacy-state-title">Chế độ riêng tư đang tắt</h2>
+          <p>Khi bật, hoạt động nghe nhạc của bạn sẽ không được chia sẻ với bạn bè và không ảnh hưởng đến đề xuất bài hát hay tổng kết nghe nhạc.</p>
+          <button class="setting-switch privacy-switch" id="privacy-switch" role="switch" aria-checked="false" aria-label="Bật chế độ riêng tư" onclick="togglePrivacyMode()"><span></span></button>
+          <strong id="privacy-state-description">Chỉ mình bạn biết mình đang nghe gì.</strong>
+        </section>
+      </div>
+    </div>
+
+    <div class="view account-view" id="view-settings">
+      <header class="topbar"><button class="back-to-home" onclick="showView('home')">‹ <span>Quay lại</span></button><h1 class="topbar-title">Cài đặt</h1></header>
+      <div class="content-scroll settings-content">
+        <section class="settings-section"><h2>Tài khoản</h2><div class="setting-row"><div><strong>Phương thức đăng nhập</strong><p>Quản lý thông tin đăng nhập của bạn</p></div><button class="glass-action" onclick="showView('account')">Sửa ↗</button></div></section>
+        <section class="settings-section"><h2>Ngôn ngữ</h2><div class="setting-row"><div><strong>Ngôn ngữ ứng dụng</strong><p>Chọn ngôn ngữ hiển thị</p></div><select class="setting-select" data-setting="language"><option>Tiếng Việt</option><option>English</option></select></div></section>
+        <section class="settings-section"><h2>Nội dung và phát</h2>
+          <div class="setting-row"><div><strong>Nội dung nhạy cảm</strong><p>Cho phép hiển thị nội dung có nhãn nhạy cảm</p></div><button class="setting-switch" role="switch" aria-checked="true" data-setting="explicit" onclick="toggleSetting(this)"><span></span></button></div>
+          <div class="setting-row"><div><strong>Tự động phát</strong><p>Tiếp tục phát nội dung tương tự khi hết danh sách</p></div><button class="setting-switch" role="switch" aria-checked="true" data-setting="autoplay" onclick="toggleSetting(this)"><span></span></button></div>
+          <div class="setting-row"><div><strong>Chất lượng stream</strong><p>Chọn chất lượng âm thanh khi phát trực tuyến</p></div><select class="setting-select" data-setting="stream-quality"><option>Tự động</option><option>Cao</option><option>Bình thường</option><option>Thấp</option></select></div>
+          <div class="setting-row"><div><strong>Chất lượng tải xuống</strong><p>Chất lượng âm thanh ngoại tuyến</p></div><select class="setting-select" data-setting="download-quality"><option>Cao</option><option>Bình thường</option><option>Thấp</option></select></div>
+          <div class="setting-row"><div><strong>Tự động điều chỉnh chất lượng</strong><p>Điều chỉnh theo kết nối mạng</p></div><button class="setting-switch" role="switch" aria-checked="true" data-setting="auto-quality" onclick="toggleSetting(this)"><span></span></button></div>
+        </section>
+        <section class="settings-section"><h2>Thư viện và hiển thị</h2>
+          <div class="setting-row"><div><strong>Sử dụng bố cục thư viện rút gọn</strong></div><button class="setting-switch" role="switch" aria-checked="false" data-setting="compact-library" onclick="toggleSetting(this)"><span></span></button></div>
+          <div class="setting-row"><div><strong>Hiển thị tệp trên thiết bị</strong></div><button class="setting-switch" role="switch" aria-checked="false" data-setting="local-files" onclick="toggleSetting(this)"><span></span></button></div>
+          <div class="setting-row"><div><strong>Hiển thị bảng đang phát khi nhấn nút phát</strong></div><button class="setting-switch" role="switch" aria-checked="true" data-setting="show-now-playing" onclick="toggleSetting(this)"><span></span></button></div>
+          <div class="setting-row"><div><strong>Hiển thị thông báo bản phát hành mới</strong></div><button class="setting-switch" role="switch" aria-checked="false" data-setting="release-notifications" onclick="toggleSetting(this)"><span></span></button></div>
+        </section>
+        <section class="settings-section"><h2>Video và Canvas</h2><div class="setting-row"><div><strong>Video nhạc</strong><p>Phát video nhạc khi có sẵn</p></div><button class="setting-switch" role="switch" aria-checked="true" data-setting="music-videos" onclick="toggleSetting(this)"><span></span></button></div><div class="setting-row"><div><strong>Canvas</strong><p>Hình ảnh động lặp lại khi bài hát đang phát</p></div><button class="setting-switch" role="switch" aria-checked="true" data-setting="canvas" onclick="toggleSetting(this)"><span></span></button></div></section>
+      </div>
+    </div>
+  </main>
+
+  <aside class="queue-panel" id="queue-panel" aria-label="Danh sách đang phát">
+    <div class="queue-heading">
+      <div class="queue-tabs">
+        <button class="queue-tab active" id="queue-tab-up-next" onclick="switchQueueTab('up-next')">Danh sách chờ</button>
+        <button class="queue-tab" id="queue-tab-recent" onclick="switchQueueTab('recent')">Đã phát gần đây</button>
+      </div>
+      <button class="queue-close" onclick="toggleQueuePanel()" aria-label="Đóng danh sách đang phát">×</button>
+    </div>
+    <div class="queue-content" id="queue-up-next">
+      <p class="queue-note">Về nội dung đề xuất và tác động của việc quảng bá bài hát</p>
+      <h2>Đang phát</h2>
+      <button class="queue-current" onclick="togglePlay(event)">
+        <img src="album_lumina.jpg" alt="" class="queue-art"/>
+        <span><strong id="queue-current-title">Celestial Vibe</strong><small id="queue-current-artist">The Midnight Drive</small></span>
+        <span class="queue-more">•••</span>
+      </button>
+      <h2 class="queue-next-heading">Tiếp theo</h2>
+      <div class="queue-list" id="queue-next-tracks"></div>
+    </div>
+    <div class="queue-content hidden" id="queue-recent">
+      <h2>Đã phát gần đây</h2>
+      <div class="queue-list" id="queue-recent-tracks"></div>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════ NOW PLAYING BAR ══════════════════════ -->
+  <div class="now-playing-bar" id="now-playing-bar" onclick="toggleExpanded()">
+    <div class="npb-left">
+      <div class="npb-art-container"><img src="album_lumina.jpg" alt="Now playing" class="npb-art" id="npb-art"/></div>
+      <div class="npb-info"><p class="npb-title" id="npb-title">Celestial Vibe</p><p class="npb-artist" id="npb-artist">The Midnight Drive</p></div>
+      <button class="npb-like-btn" id="npb-like-btn" onclick="toggleLikeNPB(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/></svg></button>
+    </div>
+    <div class="npb-center">
+      <div class="npb-controls">
+        <button class="ctrl-btn" id="shuffle-btn" onclick="toggleShuffle(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+        <button class="ctrl-btn" onclick="prevSong(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+        <button class="ctrl-btn play-pause-btn" id="play-pause-btn" onclick="togglePlay(event)">
+          <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="icon-pause hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </button>
+        <button class="ctrl-btn" onclick="nextSong(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+        <button class="ctrl-btn" id="repeat-btn" aria-label="Bật lặp lại" title="Bật lặp lại" onclick="toggleRepeat(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg></button>
+      </div>
+      <div class="npb-progress-container" role="slider" tabindex="0" aria-label="Tiến độ bài hát" aria-valuemin="0" aria-valuemax="100" onclick="event.stopPropagation()" onpointerdown="startSeek(event)" onpointermove="updateSeek(event)" onpointerup="finishSeek(event)" onpointercancel="finishSeek(event)" onkeydown="handleSeekKeydown(event)">
+        <span class="npb-time" id="current-time">0:00</span>
+        <div class="npb-progress-bar"><div class="npb-progress-fill" id="progress-fill"></div><div class="npb-progress-thumb" id="progress-thumb"></div></div>
+        <span class="npb-time" id="total-time">3:45</span>
+      </div>
+    </div>
+    <div class="npb-right">
+      <button class="ctrl-btn-sm" type="button" onclick="toggleQueuePanel(event)" aria-label="Hiện hoặc ẩn danh sách chờ" title="Danh sách chờ"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h13v-2H3v2zm0-5h10v-2H3v2zm0-7v2h13V6H3zm18 9.59L17.42 12 21 8.41 19.59 7l-5 5 5 5L21 15.59z"/></svg></button>
+      <div class="volume-container">
+        <button class="ctrl-btn-sm" id="mute-btn" onclick="toggleMute(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>
+        <div class="volume-bar-container" data-volume-slider role="slider" tabindex="0" aria-label="Âm lượng" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" onclick="event.stopPropagation()" onpointerdown="startVolumeChange(event)" onpointermove="updateVolumeChange(event)" onpointerup="finishVolumeChange(event)" onpointercancel="finishVolumeChange(event)" onkeydown="handleVolumeKeydown(event)"><div class="volume-bar"><div class="volume-fill" id="volume-fill" style="width:70%"></div></div></div>
+        <button class="ctrl-btn-sm karaoke-player-button" id="karaoke-toggle" type="button" aria-label="Hát karaoke" title="Nhập tệp nhạc để bật karaoke" aria-pressed="false" disabled onclick="toggleKaraoke()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M9 8l12-2"/></svg>
+        </button>
+        <button class="ctrl-btn-sm lyrics-player-button" id="lyrics-toggle" type="button" aria-label="Mở lời bài hát" title="Lời bài hát" onclick="toggleLyrics(event)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <audio id="audio-player" preload="metadata"></audio>
+
+  <!-- ══════════════════════ NOW PLAYING DETAIL ══════════════════════ -->
+  <div class="expanded-player" id="expanded-player" aria-hidden="true" role="dialog" aria-label="Trình phát nhạc">
+    <div class="expanded-bg" id="expanded-bg"></div>
+    <div class="expanded-blur"></div>
+    <div class="expanded-header">
+      <button class="expand-down-btn" onclick="toggleExpanded()" aria-label="Thu nhỏ trình phát">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+        <span>Đang phát</span>
+      </button>
+      <button class="expanded-options-btn" id="expanded-options-btn" type="button" aria-label="Tùy chọn bài hát" aria-haspopup="menu" aria-expanded="false" onclick="toggleExpandedTrackOptions(event)">•••</button>
+      <div class="expanded-track-menu hidden" id="expanded-track-menu" role="menu" aria-label="Tùy chọn bài hát đang phát">
+        <button type="button" role="menuitem" onclick="addCurrentTrackToQueue(event)">Thêm vào danh sách chờ</button>
+        <button type="button" role="menuitem" onclick="toggleLikeExpanded();closeExpandedTrackOptions()">Yêu thích / bỏ yêu thích</button>
+        <button type="button" role="menuitem" onclick="saveCurrentTrackToPlaylist(event)">Lưu vào playlist đang mở</button>
+      </div>
+    </div>
+    <div class="expanded-art-section">
+      <div class="expanded-art-main" id="expanded-art-main">
+        <img src="album_lumina.jpg" alt="Now playing" class="expanded-art-img" id="expanded-art-img"/>
+      </div>
+    </div>
+    <div class="expanded-info">
+      <div class="expanded-title-row">
+        <div><h2 class="expanded-title" id="expanded-title">Celestial Vibe</h2><p class="expanded-artist" id="expanded-artist">The Midnight Drive</p><p class="expanded-album" id="expanded-album">Lumina</p></div>
+        <button class="expanded-like-btn" id="expanded-like-btn" onclick="toggleLikeExpanded()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/></svg></button>
+      </div>
+      <div class="expanded-progress-container" role="slider" tabindex="0" aria-label="Tiến độ bài hát" aria-valuemin="0" aria-valuemax="100" onclick="event.stopPropagation()" onpointerdown="startSeek(event)" onpointermove="updateSeek(event)" onpointerup="finishSeek(event)" onpointercancel="finishSeek(event)" onkeydown="handleSeekKeydown(event)">
+        <div class="expanded-progress-bar"><div class="expanded-progress-fill" id="expanded-fill"></div><div class="expanded-progress-thumb" id="expanded-thumb"></div></div>
+        <div class="expanded-times"><span id="exp-current-time">0:00</span><span id="exp-total-time">3:45</span></div>
+      </div>
+      <div class="expanded-controls">
+        <button class="exp-ctrl-btn" id="exp-shuffle-btn" onclick="toggleShuffle(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+        <button class="exp-ctrl-btn exp-prev" onclick="prevSong(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+        <button class="exp-play-btn" id="exp-play-btn" onclick="togglePlay(event)">
+          <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="icon-pause hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </button>
+        <button class="exp-ctrl-btn exp-next" onclick="nextSong(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+        <button class="exp-ctrl-btn" id="exp-repeat-btn" aria-label="Bật lặp lại" title="Bật lặp lại" onclick="toggleRepeat(event)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg></button>
+      </div>
+      <div class="expanded-volume">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
+        <div class="exp-volume-bar" id="exp-vol-bar" data-volume-slider role="slider" tabindex="0" aria-label="Âm lượng" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" onclick="event.stopPropagation()" onpointerdown="startVolumeChange(event)" onpointermove="updateVolumeChange(event)" onpointerup="finishVolumeChange(event)" onpointercancel="finishVolumeChange(event)" onkeydown="handleVolumeKeydown(event)"><div class="exp-volume-fill" id="exp-volume-fill" style="width:70%"></div></div>
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+      </div>
+      <div class="up-next-section"><h3>Tiếp theo</h3><div class="up-next-list" id="up-next-list"></div></div>
+    </div>
+  </div>
+  <dialog class="karaoke-dialog" id="karaoke-dialog" aria-labelledby="karaoke-title">
+    <header class="karaoke-dialog-header">
+      <div><span class="eyebrow">SPOTISIX · KARAOKE</span><h2 id="karaoke-title">Hát karaoke</h2></div>
+      <button class="dialog-close" type="button" onclick="closeKaraokeDialog()" aria-label="Đóng">×</button>
+    </header>
+    <label class="karaoke-vocal-label" for="karaoke-vocal">Âm lượng vocal <span id="karaoke-vocal-value">100%</span></label>
+    <input id="karaoke-vocal" type="range" min="0" max="100" value="100" step="1" disabled>
+    <p class="karaoke-status" id="karaoke-status" role="status" aria-live="polite">Chọn một tệp nhạc để bật karaoke.</p>
+    <div class="karaoke-lyrics" id="karaoke-lyrics" aria-live="polite">Lyrics sẽ hiển thị tại đây.</div>
+  </dialog>
+  <dialog class="lyrics-dialog" id="lyrics-dialog" aria-labelledby="lyrics-title">
+    <header class="karaoke-dialog-header">
+      <div><span class="eyebrow">SPOTISIX · LYRICS</span><h2 id="lyrics-title">Lời bài hát</h2><p class="lyrics-track-label" id="lyrics-track-label"></p></div>
+      <button class="dialog-close" type="button" onclick="closeLyrics()" aria-label="Đóng">×</button>
+    </header>
+    <p class="lyrics-status" id="lyrics-status" role="status" aria-live="polite">Đang tìm lời bài hát…</p>
+    <div class="lyrics-lines" id="lyrics-lines" aria-live="off"></div>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js" vite-ignore></script>
+  <script src="app.js" vite-ignore></script>
+  <script type="module" src="nearby.js"></script>
+  <script type="module" src="shared-listening.js"></script>
+  <script type="module" src="karaoke.js"></script>
+</body>
+</html>
