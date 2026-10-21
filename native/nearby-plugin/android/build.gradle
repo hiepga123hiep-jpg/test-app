@@ -1,0 +1,16 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.spotisix.nearby'
+    compileSdk project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 35
+
+    defaultConfig {
+        minSdk project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 23
+    }
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+}
